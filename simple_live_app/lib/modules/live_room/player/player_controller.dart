@@ -218,8 +218,28 @@ mixin PlayerDanmakuMixin on PlayerStateMixin {
   /// 弹幕控制器
   DanmakuController? danmakuController;
 
+  /// 调试统计：每 5 秒把「实际上屏 / 被限流丢弃」的条数打到 logcat，
+  /// 用来确认「每秒最多上屏」是否真的生效（不写日志文件）。
+  Timer? _danmuStatsTimer;
+  int _danmuShownStat = 0;
+  int _danmuDroppedStat = 0;
+
   void initDanmakuController(DanmakuController e) {
     danmakuController = e;
+    _danmuStatsTimer?.cancel();
+    _danmuStatsTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (_danmuShownStat == 0 && _danmuDroppedStat == 0) {
+        return;
+      }
+      final cap = AppSettingsController.instance.danmuMaxPerSecond.value;
+      final powerSave = AppSettingsController.instance.danmuPowerSave.value;
+      debugPrint(
+        "DanmuStats cap=$cap powerSave=$powerSave "
+        "shown=$_danmuShownStat dropped=$_danmuDroppedStat",
+      );
+      _danmuShownStat = 0;
+      _danmuDroppedStat = 0;
+    });
     // danmakuController?.updateOption(
     //   DanmakuOption(
     //     fontSize: AppSettingsController.instance.danmuSize.value,
@@ -239,6 +259,8 @@ mixin PlayerDanmakuMixin on PlayerStateMixin {
   }
 
   void disposeDanmakuController() {
+    _danmuStatsTimer?.cancel();
+    _danmuStatsTimer = null;
     danmakuController?.clear();
   }
 
@@ -265,6 +287,7 @@ mixin PlayerDanmakuMixin on PlayerStateMixin {
     }
     for (var item in items) {
       if (capPerSecond > 0 && _danmakuWindowCount >= capPerSecond) {
+        _danmuDroppedStat++;
         return;
       }
       // 省电模式：每 2 条只上屏 1 条，再砍一半布局与绘制开销
@@ -272,6 +295,7 @@ mixin PlayerDanmakuMixin on PlayerStateMixin {
         continue;
       }
       _danmakuWindowCount++;
+      _danmuShownStat++;
       danmakuController?.addDanmaku(item);
     }
   }
