@@ -219,8 +219,11 @@ class MyApp extends StatelessWidget {
           Log.addDebugLog(text, (isError ?? false) ? Colors.red : Colors.grey);
           Log.writeLog(text, (isError ?? false) ? Level.error : Level.info);
         },
-        // 升级后Android页面过渡动画似乎有BUG
-        defaultTransition: Platform.isAndroid ? Transition.cupertino : null,
+        // 页面都是透明背景（渐变画在 builder 的 Stack 最底层），
+        // 一旦启用滑入/淡入过渡，过渡期间新旧两页会同时绘制，
+        // 表现为旧页元素残留在新页上 0.3~1 秒。
+        // 因此这里干脆关掉页面过渡，切换即时完成。
+        defaultTransition: Transition.noTransition,
         //debugShowCheckedModeBanner: false,
         navigatorObservers: [FlutterSmartDialog.observer],
         builder: FlutterSmartDialog.init(
@@ -234,7 +237,8 @@ class MyApp extends StatelessWidget {
             const maxNormalPadding = 50.0;
 
             final mediaQueryData = MediaQuery.of(context);
-            final hasAbnormalPadding = mediaQueryData.viewPadding.top > maxNormalPadding;
+            final hasAbnormalPadding =
+                mediaQueryData.viewPadding.top > maxNormalPadding;
 
             final fixedMediaQueryData = hasAbnormalPadding
                 ? mediaQueryData.copyWith(
@@ -242,82 +246,83 @@ class MyApp extends StatelessWidget {
                     padding: fallbackPadding,
                     textScaler: const TextScaler.linear(1.0),
                   )
-                : mediaQueryData.copyWith(textScaler: const TextScaler.linear(1.0));
+                : mediaQueryData.copyWith(
+                    textScaler: const TextScaler.linear(1.0));
 
             return MediaQuery(
               data: fixedMediaQueryData,
               child: Stack(
-              children: [
-                Positioned.fill(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: skin.gradient(Theme.of(context).brightness),
+                children: [
+                  Positioned.fill(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: skin.gradient(Theme.of(context).brightness),
+                      ),
                     ),
                   ),
-                ),
-                //侧键返回
-                RawGestureDetector(
-                  excludeFromSemantics: true,
-                  gestures: <Type, GestureRecognizerFactory>{
-                    FourthButtonTapGestureRecognizer:
-                        GestureRecognizerFactoryWithHandlers<
-                            FourthButtonTapGestureRecognizer>(
-                      () => FourthButtonTapGestureRecognizer(),
-                      (FourthButtonTapGestureRecognizer instance) {
-                        instance.onTapDown = (TapDownDetails details) async {
-                          //如果处于全屏状态，退出全屏
+                  //侧键返回
+                  RawGestureDetector(
+                    excludeFromSemantics: true,
+                    gestures: <Type, GestureRecognizerFactory>{
+                      FourthButtonTapGestureRecognizer:
+                          GestureRecognizerFactoryWithHandlers<
+                              FourthButtonTapGestureRecognizer>(
+                        () => FourthButtonTapGestureRecognizer(),
+                        (FourthButtonTapGestureRecognizer instance) {
+                          instance.onTapDown = (TapDownDetails details) async {
+                            //如果处于全屏状态，退出全屏
+                            if (!Platform.isAndroid && !Platform.isIOS) {
+                              if (await windowManager.isFullScreen()) {
+                                await windowManager.setFullScreen(false);
+                                return;
+                              }
+                            }
+                            Get.back();
+                          };
+                        },
+                      ),
+                    },
+                    child: KeyboardListener(
+                      focusNode: FocusNode(),
+                      onKeyEvent: (KeyEvent event) async {
+                        if (event is KeyDownEvent &&
+                            event.logicalKey == LogicalKeyboardKey.escape) {
+                          // ESC退出全屏
+                          // 如果处于全屏状态，退出全屏
                           if (!Platform.isAndroid && !Platform.isIOS) {
                             if (await windowManager.isFullScreen()) {
                               await windowManager.setFullScreen(false);
                               return;
                             }
                           }
-                          Get.back();
-                        };
-                      },
-                    ),
-                  },
-                  child: KeyboardListener(
-                    focusNode: FocusNode(),
-                    onKeyEvent: (KeyEvent event) async {
-                      if (event is KeyDownEvent &&
-                          event.logicalKey == LogicalKeyboardKey.escape) {
-                        // ESC退出全屏
-                        // 如果处于全屏状态，退出全屏
-                        if (!Platform.isAndroid && !Platform.isIOS) {
-                          if (await windowManager.isFullScreen()) {
-                            await windowManager.setFullScreen(false);
-                            return;
-                          }
                         }
-                      }
-                    },
-                    child: child!,
+                      },
+                      child: child!,
+                    ),
                   ),
-                ),
 
-                //查看DEBUG日志按钮
-                //只在Debug、Profile模式显示
-                Visibility(
-                  visible: !kReleaseMode,
-                  child: Positioned(
-                    right: 12,
-                    bottom: 100 + context.mediaQueryViewPadding.bottom,
-                    child: Opacity(
-                      opacity: 0.4,
-                      child: ElevatedButton(
-                        child: const Text("DEBUG LOG"),
-                        onPressed: () {
-                          Get.bottomSheet(
-                            const DebugLogPage(),
-                          );
-                        },
+                  //查看DEBUG日志按钮
+                  //只在Debug、Profile模式显示
+                  Visibility(
+                    visible: !kReleaseMode,
+                    child: Positioned(
+                      right: 12,
+                      bottom: 100 + context.mediaQueryViewPadding.bottom,
+                      child: Opacity(
+                        opacity: 0.4,
+                        child: ElevatedButton(
+                          child: const Text("DEBUG LOG"),
+                          onPressed: () {
+                            Get.bottomSheet(
+                              const DebugLogPage(),
+                            );
+                          },
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
             );
           },
         ),
