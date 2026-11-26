@@ -256,14 +256,15 @@ mixin PlayerDanmakuMixin on PlayerStateMixin {
       return;
     }
     final powerSave = AppSettingsController.instance.danmuPowerSave.value;
-    final capPerSecond = powerSave ? 15 : 30;
+    // 0 表示不限；省电模式再叠一层 1/2 采样
+    final capPerSecond = AppSettingsController.instance.danmuMaxPerSecond.value;
     var now = DateTime.now().millisecondsSinceEpoch;
     if (now - _danmakuWindowStart >= 1000) {
       _danmakuWindowStart = now;
       _danmakuWindowCount = 0;
     }
     for (var item in items) {
-      if (_danmakuWindowCount >= capPerSecond) {
+      if (capPerSecond > 0 && _danmakuWindowCount >= capPerSecond) {
         return;
       }
       // 省电模式：每 2 条只上屏 1 条，再砍一半布局与绘制开销

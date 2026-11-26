@@ -6,6 +6,7 @@ import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_app/routes/route_path.dart';
 import 'package:simple_live_app/widgets/settings/settings_action.dart';
 import 'package:simple_live_app/widgets/settings/settings_card.dart';
+import 'package:simple_live_app/widgets/settings/settings_menu.dart';
 import 'package:simple_live_app/widgets/settings/settings_number.dart';
 import 'package:simple_live_app/widgets/settings/settings_switch.dart';
 
@@ -91,6 +92,23 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
                   value: controller.danmuPowerSave.value,
                   onChanged: (e) {
                     controller.setDanmuPowerSave(e);
+                  },
+                ),
+              ),
+              AppStyle.divider,
+              Obx(
+                () => SettingsMenu<int>(
+                  title: "每秒最多上屏",
+                  subtitle: "弹幕太密导致掉帧时调低；聊天区不受影响",
+                  value: controller.danmuMaxPerSecond.value,
+                  valueMap: const {
+                    0: "不限",
+                    15: "15 条",
+                    30: "30 条",
+                    60: "60 条",
+                  },
+                  onChanged: (e) {
+                    controller.setDanmuMaxPerSecond(e);
                   },
                 ),
               ),

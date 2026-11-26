@@ -83,6 +83,9 @@ class AppSettingsController extends GetxController {
     danmuPowerSave.value = LocalStorageService.instance
         .getValue(LocalStorageService.kDanmuPowerSave, false);
 
+    danmuMaxPerSecond.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kDanmuMaxPerSecond, 30);
+
     playerForceHttps.value = LocalStorageService.instance
         .getValue(LocalStorageService.kPlayerForceHttps, false);
 
@@ -381,6 +384,14 @@ class AppSettingsController extends GetxController {
     danmuPowerSave.value = e;
     LocalStorageService.instance
         .setValue(LocalStorageService.kDanmuPowerSave, e);
+  }
+
+  /// 弹幕每秒上屏上限，0 表示不限
+  var danmuMaxPerSecond = 30.obs;
+  void setDanmuMaxPerSecond(int e) {
+    danmuMaxPerSecond.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kDanmuMaxPerSecond, e);
   }
 
   var playerAutoPause = false.obs;

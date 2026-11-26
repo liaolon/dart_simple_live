@@ -108,6 +108,9 @@ class LocalStorageService extends GetxService {
   /// 弹幕省电模式（降轨道、去描边、采样上屏）
   static const String kDanmuPowerSave = "DanmuPowerSave";
 
+  /// 弹幕每秒上屏上限（0 = 不限）
+  static const String kDanmuMaxPerSecond = "DanmuMaxPerSecond";
+
   /// 自动全屏
   static const String kAutoFullScreen = "AutoFullScreen";
 
