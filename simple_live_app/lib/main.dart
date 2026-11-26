@@ -219,11 +219,10 @@ class MyApp extends StatelessWidget {
           Log.addDebugLog(text, (isError ?? false) ? Colors.red : Colors.grey);
           Log.writeLog(text, (isError ?? false) ? Level.error : Level.info);
         },
-        // 页面都是透明背景（渐变画在 builder 的 Stack 最底层），
-        // 一旦启用滑入/淡入过渡，过渡期间新旧两页会同时绘制，
-        // 表现为旧页元素残留在新页上 0.3~1 秒。
-        // 因此这里干脆关掉页面过渡，切换即时完成。
-        defaultTransition: Transition.noTransition,
+        // 页面过渡会同时绘制新旧两页，所以每个页面必须自带不透明底：
+        // SkinPage（见 app/skin_background.dart）负责铺皮肤渐变，
+        // 由 app_pages.dart 统一包裹每个 GetPage。
+        defaultTransition: Platform.isAndroid ? Transition.cupertino : null,
         //debugShowCheckedModeBanner: false,
         navigatorObservers: [FlutterSmartDialog.observer],
         builder: FlutterSmartDialog.init(

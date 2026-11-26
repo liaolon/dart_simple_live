@@ -46,6 +46,8 @@ import 'package:simple_live_app/modules/settings/other/other_settings_controller
 import 'package:simple_live_app/modules/settings/other/other_settings_page.dart';
 import 'package:simple_live_app/modules/settings/play_settings_page.dart';
 
+import 'package:simple_live_app/app/skin_background.dart';
+
 import '../modules/indexed/indexed_page.dart';
 import 'route_path.dart';
 
@@ -55,7 +57,7 @@ class AppPages {
     // 首页
     GetPage(
       name: RoutePath.kIndex,
-      page: () => const IndexedPage(),
+      page: () => const SkinPage(child: IndexedPage()),
       bindings: [
         BindingsBuilder.put(() => IndexedController()),
         //BindingsBuilder.put(() => HomeController()),
@@ -64,7 +66,7 @@ class AppPages {
     // 观看记录
     GetPage(
       name: RoutePath.kHistory,
-      page: () => const HistoryPage(),
+      page: () => const SkinPage(child: HistoryPage()),
       bindings: [
         BindingsBuilder.put(() => HistoryController()),
       ],
@@ -72,7 +74,7 @@ class AppPages {
     // 关注用户
     GetPage(
       name: RoutePath.kFollowUser,
-      page: () => const FollowUserPage(),
+      page: () => const SkinPage(child: FollowUserPage()),
       bindings: [
         BindingsBuilder.put(() => FollowUserController()),
       ],
@@ -80,7 +82,7 @@ class AppPages {
     // 搜索
     GetPage(
       name: RoutePath.kSearch,
-      page: () => const SearchPage(),
+      page: () => const SkinPage(child: SearchPage()),
       bindings: [
         BindingsBuilder.put(() => AppSearchController()),
       ],
@@ -88,7 +90,7 @@ class AppPages {
     //分类详情
     GetPage(
       name: RoutePath.kCategoryDetail,
-      page: () => const CategoryDetailPage(),
+      page: () => const SkinPage(child: CategoryDetailPage()),
       binding: BindingsBuilder.put(
         () => CategoryDetailController(
           site: Get.arguments[0],
@@ -99,7 +101,7 @@ class AppPages {
     //直播间
     GetPage(
       name: RoutePath.kLiveRoomDetail,
-      page: () => const LiveRoomPage(),
+      page: () => const SkinPage(child: LiveRoomPage()),
       binding: BindingsBuilder.put(
         () => LiveRoomController(
           pSite: Get.arguments,
@@ -110,26 +112,26 @@ class AppPages {
     //弹幕设置
     GetPage(
       name: RoutePath.kSettingsDanmu,
-      page: () => const DanmuSettingsPage(),
+      page: () => const SkinPage(child: DanmuSettingsPage()),
     ),
     //外观设置
     GetPage(
         name: RoutePath.kAppstyleSetting,
-        page: () => const AppstyleSettingPage()),
+        page: () => const SkinPage(child: AppstyleSettingPage())),
     //播放设置
     GetPage(
       name: RoutePath.kSettingsPlay,
-      page: () => const PlaySettingsPage(),
+      page: () => const SkinPage(child: PlaySettingsPage()),
     ),
     //自动关闭
     GetPage(
       name: RoutePath.kSettingsAutoExit,
-      page: () => const AutoExitSettingsPage(),
+      page: () => const SkinPage(child: AutoExitSettingsPage()),
     ),
     //工具箱
     GetPage(
       name: RoutePath.kTools,
-      page: () => const ParsePage(),
+      page: () => const SkinPage(child: ParsePage()),
       bindings: [
         BindingsBuilder.put(() => ParseController()),
       ],
@@ -137,7 +139,7 @@ class AppPages {
     //关键词屏蔽
     GetPage(
       name: RoutePath.kSettingsDanmuShield,
-      page: () => const DanmuShieldPage(),
+      page: () => const SkinPage(child: DanmuShieldPage()),
       bindings: [
         BindingsBuilder.put(() => DanmuShieldController()),
       ],
@@ -145,7 +147,7 @@ class AppPages {
     //主页设置
     GetPage(
       name: RoutePath.kSettingsIndexed,
-      page: () => const IndexedSettingsPage(),
+      page: () => const SkinPage(child: IndexedSettingsPage()),
       bindings: [
         BindingsBuilder.put(() => IndexedSettingsController()),
       ],
@@ -153,7 +155,7 @@ class AppPages {
     //账号设置
     GetPage(
       name: RoutePath.kSettingsAccount,
-      page: () => const AccountPage(),
+      page: () => const SkinPage(child: AccountPage()),
       bindings: [
         BindingsBuilder.put(() => AccountController()),
       ],
@@ -161,7 +163,7 @@ class AppPages {
     //哔哩哔哩Web登录
     GetPage(
       name: RoutePath.kBiliBiliWebLogin,
-      page: () => const BiliBiliWebLoginPage(),
+      page: () => const SkinPage(child: BiliBiliWebLoginPage()),
       bindings: [
         BindingsBuilder.put(() => BiliBiliWebLoginController()),
       ],
@@ -169,7 +171,7 @@ class AppPages {
     //哔哩哔哩二维码登录
     GetPage(
       name: RoutePath.kBiliBiliQRLogin,
-      page: () => const BiliBiliQRLoginPage(),
+      page: () => const SkinPage(child: BiliBiliQRLoginPage()),
       bindings: [
         BindingsBuilder.put(() => BiliBiliQRLoginController()),
       ],
@@ -177,7 +179,7 @@ class AppPages {
     //抖音网页登录
     GetPage(
       name: RoutePath.kDouyinWebLogin,
-      page: () => const DouyinWebLoginPage(),
+      page: () => const SkinPage(child: DouyinWebLoginPage()),
       bindings: [
         BindingsBuilder.put(() => DouyinWebLoginController()),
       ],
@@ -185,12 +187,12 @@ class AppPages {
     // 数据同步
     GetPage(
       name: RoutePath.kSync,
-      page: () => const SyncPage(),
+      page: () => const SkinPage(child: SyncPage()),
     ),
     // 本地同步
     GetPage(
       name: RoutePath.kLocalSync,
-      page: () => const LocalSyncPage(),
+      page: () => const SkinPage(child: LocalSyncPage()),
       bindings: [
         BindingsBuilder.put(
           () => LocalSyncController(
@@ -202,7 +204,7 @@ class AppPages {
     //扫码
     GetPage(
       name: RoutePath.kSyncScan,
-      page: () => const SyncScanQRPage(),
+      page: () => const SkinPage(child: SyncScanQRPage()),
       bindings: [
         BindingsBuilder.put(() => SyncScanQRControlelr()),
       ],
@@ -210,7 +212,7 @@ class AppPages {
     //同步设备
     GetPage(
       name: RoutePath.kLocalSyncDevice,
-      page: () => const SyncDevicePage(),
+      page: () => const SkinPage(child: SyncDevicePage()),
       bindings: [
         BindingsBuilder.put(
           () => SyncDeviceController(
@@ -223,7 +225,7 @@ class AppPages {
     //远程同步-房间
     GetPage(
       name: RoutePath.kRemoteSyncRoom,
-      page: () => const RemoteSyncRoomPage(),
+      page: () => const SkinPage(child: RemoteSyncRoomPage()),
       bindings: [
         BindingsBuilder.put(
           () => RemoteSyncRoomController(Get.arguments ?? ""),
@@ -233,22 +235,22 @@ class AppPages {
     //远程同步-WebDAV
     GetPage(
       name: RoutePath.kRemoteSyncWebDav,
-      page: () => const RemoteSyncWebDAVPage(),
+      page: () => const SkinPage(child: RemoteSyncWebDAVPage()),
       bindings: [
         BindingsBuilder.put(
-              () => RemoteSyncWebDAVController(),
+          () => RemoteSyncWebDAVController(),
         ),
       ],
     ),
     //远程同步-WebDAVConfig
     GetPage(
       name: RoutePath.kRemoteSyncWebDavConfig,
-      page: () => const RemoteSyncWebDAVConfigPage(),
+      page: () => const SkinPage(child: RemoteSyncWebDAVConfigPage()),
     ),
     //其他设置
     GetPage(
       name: RoutePath.kSettingsOther,
-      page: () => const OtherSettingsPage(),
+      page: () => const SkinPage(child: OtherSettingsPage()),
       bindings: [
         BindingsBuilder.put(() => OtherSettingsController()),
       ],
@@ -256,7 +258,7 @@ class AppPages {
     //关注设置
     GetPage(
       name: RoutePath.kSettingsFollow,
-      page: () => const FollowSettingsPage(),
+      page: () => const SkinPage(child: FollowSettingsPage()),
     ),
   ];
 }
