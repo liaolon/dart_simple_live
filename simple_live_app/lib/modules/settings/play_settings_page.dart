@@ -56,6 +56,21 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
                     ),
                   ),
                 ),
+                if (Platform.isAndroid) AppStyle.divider,
+                Obx(
+                  () => Visibility(
+                    visible: Platform.isAndroid,
+                    child: SettingsSwitch(
+                      title: "低功耗解码",
+                      subtitle: "硬解结果零拷贝直出屏幕，省电；天玑8100 等设备收益最明显。"
+                          "个别直播流花屏/黑屏时请关闭",
+                      value: controller.playerLowPowerDecode.value,
+                      onChanged: (e) {
+                        controller.setPlayerLowPowerDecode(e);
+                      },
+                    ),
+                  ),
+                ),
                 AppStyle.divider,
                 Obx(
                   () => SettingsNumber(

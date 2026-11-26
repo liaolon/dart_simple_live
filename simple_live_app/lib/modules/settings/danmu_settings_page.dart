@@ -84,6 +84,18 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
               ),
               AppStyle.divider,
               Obx(
+                () => SettingsSwitch(
+                  title: "弹幕省电模式",
+                  subtitle: "轨道压到六成、去掉描边、每 2 条只显示 1 条；"
+                      "弹幕密集导致发热掉帧时打开",
+                  value: controller.danmuPowerSave.value,
+                  onChanged: (e) {
+                    controller.setDanmuPowerSave(e);
+                  },
+                ),
+              ),
+              AppStyle.divider,
+              Obx(
                 () => SettingsNumber(
                   title: "显示区域",
                   value: (controller.danmuArea.value * 100).toInt(),

@@ -64,6 +64,15 @@ mixin PlayerMixin {
     // media_kit 仓库更新导致的问题，临时解决办法
     if (Platform.isAndroid) {
       await pp.setProperty('force-seekable', 'yes');
+      // 低功耗解码：显式指定零拷贝硬解，避免 hwdec=auto 选到 mediacodec-copy
+      if (AppSettingsController.instance.playerLowPowerDecode.value) {
+        try {
+          await pp.setProperty('hwdec', 'mediacodec');
+          await pp.setProperty('vo', 'mediacodec_embed');
+        } catch (e) {
+          Log.logPrint(e);
+        }
+      }
     }
   }
 
@@ -75,7 +84,11 @@ mixin PlayerMixin {
             vo: AppSettingsController.instance.videoOutputDriver.value,
             hwdec: AppSettingsController.instance.videoHardwareDecoder.value,
           )
-        : AppSettingsController.instance.playerCompatMode.value
+        // 低功耗解码与兼容模式都走 mediacodec_embed + mediacodec：
+        // 解码帧零拷贝直出 Surface，不必拷回系统内存再交给 GPU 上屏。
+        : Platform.isAndroid &&
+                (AppSettingsController.instance.playerLowPowerDecode.value ||
+                    AppSettingsController.instance.playerCompatMode.value)
             ? const VideoControllerConfiguration(
                 vo: 'mediacodec_embed',
                 hwdec: 'mediacodec',
@@ -227,11 +240,19 @@ mixin PlayerDanmakuMixin on PlayerStateMixin {
     danmakuController?.clear();
   }
 
+  /// 省电模式下的弹幕采样计数
+  int _danmakuSampleCounter = 0;
+
   void addDanmaku(List<DanmakuContentItem> items) {
     if (!showDanmakuState.value) {
       return;
     }
+    final powerSave = AppSettingsController.instance.danmuPowerSave.value;
     for (var item in items) {
+      // 省电模式：每 2 条只上屏 1 条，直接砍掉一半布局与绘制开销
+      if (powerSave && _danmakuSampleCounter++ % 2 == 1) {
+        continue;
+      }
       danmakuController?.addDanmaku(item);
     }
   }

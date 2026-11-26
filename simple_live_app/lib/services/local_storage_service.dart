@@ -102,6 +102,12 @@ class LocalStorageService extends GetxService {
   /// 播放器强制使用HTTPS
   static const String kPlayerForceHttps = "PlayerForceHttps";
 
+  /// 低功耗解码（零拷贝直出，Android）
+  static const String kPlayerLowPowerDecode = "PlayerLowPowerDecode";
+
+  /// 弹幕省电模式（降轨道、去描边、采样上屏）
+  static const String kDanmuPowerSave = "DanmuPowerSave";
+
   /// 自动全屏
   static const String kAutoFullScreen = "AutoFullScreen";
 
@@ -122,6 +128,7 @@ class LocalStorageService extends GetxService {
 
   ///主题色
   static const String kStyleColor = "kStyleColor";
+
   /// 皮肤ID
   static const String kSkinId = "SkinId";
 

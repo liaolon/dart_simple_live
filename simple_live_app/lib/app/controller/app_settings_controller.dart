@@ -77,6 +77,12 @@ class AppSettingsController extends GetxController {
     playerAutoPause.value = LocalStorageService.instance
         .getValue(LocalStorageService.kPlayerAutoPause, false);
 
+    playerLowPowerDecode.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kPlayerLowPowerDecode, false);
+
+    danmuPowerSave.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kDanmuPowerSave, false);
+
     playerForceHttps.value = LocalStorageService.instance
         .getValue(LocalStorageService.kPlayerForceHttps, false);
 
@@ -153,7 +159,7 @@ class AppSettingsController extends GetxController {
         .getValue(LocalStorageService.kUpdateFollowDuration, 10);
 
     updateFollowThreadCount.value = LocalStorageService.instance
-        .getValue(LocalStorageService.kUpdateFollowThreadCount, 0);  // 默认 0 = 自动
+        .getValue(LocalStorageService.kUpdateFollowThreadCount, 0); // 默认 0 = 自动
 
     initSiteSort();
     initHomeSort();
@@ -359,6 +365,22 @@ class AppSettingsController extends GetxController {
     playerBufferSize.value = e;
     LocalStorageService.instance
         .setValue(LocalStorageService.kPlayerBufferSize, e);
+  }
+
+  /// 低功耗解码：mediacodec 零拷贝直出 Surface，省一次全帧拷贝
+  var playerLowPowerDecode = false.obs;
+  void setPlayerLowPowerDecode(bool e) {
+    playerLowPowerDecode.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kPlayerLowPowerDecode, e);
+  }
+
+  /// 弹幕省电模式：压轨道、去描边、每 2 条上屏 1 条
+  var danmuPowerSave = false.obs;
+  void setDanmuPowerSave(bool e) {
+    danmuPowerSave.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kDanmuPowerSave, e);
   }
 
   var playerAutoPause = false.obs;

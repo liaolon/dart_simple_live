@@ -647,16 +647,26 @@ Widget buildControls(
 
 Widget buildDanmuView(VideoState videoState, LiveRoomController controller) {
   var padding = MediaQuery.of(videoState.context).padding;
+  var powerSave = AppSettingsController.instance.danmuPowerSave.value;
   controller.danmakuView ??= DanmakuScreen(
     key: controller.globalDanmuKey,
     createdController: controller.initDanmakuController,
     option: DanmakuOption(
       fontSize: AppSettingsController.instance.danmuSize.value,
-      area: AppSettingsController.instance.danmuArea.value,
+      // 省电模式：把可用轨道压到六成，超出的弹幕直接被丢弃
+      area: powerSave
+          ? (AppSettingsController.instance.danmuArea.value * 0.6)
+              .clamp(0.2, 0.6)
+              .toDouble()
+          : AppSettingsController.instance.danmuArea.value,
       duration: AppSettingsController.instance.danmuSpeed.value.toInt(),
       opacity: AppSettingsController.instance.danmuOpacity.value,
       //strokeWidth: AppSettingsController.instance.danmuStrokeWidth.value,
       fontWeight: AppSettingsController.instance.danmuFontWeight.value,
+      // 描边是二次绘制，关掉能明显降 CPU
+      showStroke: !powerSave,
+      massiveMode: false,
+      safeArea: !powerSave,
     ),
   );
   return Positioned.fill(
