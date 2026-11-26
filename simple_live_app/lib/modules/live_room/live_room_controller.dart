@@ -554,8 +554,12 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     _lastRefreshTime = now;
     _refreshingPlayUrl = true;
     try {
-      var playUrl = await site.liveSite.getPlayUrls(
-          detail: detail.value!, quality: qualites[currentQuality]);
+      var playUrl = await site.liveSite
+          .getPlayUrls(
+            detail: detail.value!,
+            quality: qualites[currentQuality],
+          )
+          .timeout(const Duration(seconds: 15));
       if (playUrl.urls.isEmpty) {
         Log.d("重新获取播放地址失败");
         return;

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:device_info_plus/device_info_plus.dart';
@@ -125,16 +126,45 @@ class LogFileWriter {
     writeSystemInfo();
   }
 
+  /// 攒批写：每次系统调用都要走一次 IO，而播放器日志是高频的
+  /// （player.stream.log 每秒几十条）。逐条 flushSync 会把主线程拖死，
+  /// 表现为「看着看着整个界面卡住」。这里最多攒 32 行或 200ms 写一次。
+  final StringBuffer _pending = StringBuffer();
+  Timer? _flushTimer;
+  int _pendingLines = 0;
+
   void write(String content) {
+    _pending.write(content);
+    _pending.write("\r\n");
+    _pendingLines++;
+    if (_pendingLines >= 32) {
+      _flushPending();
+      return;
+    }
+    _flushTimer ??= Timer(const Duration(milliseconds: 200), () {
+      _flushTimer = null;
+      _flushPending();
+    });
+  }
+
+  void _flushPending() {
+    _flushTimer?.cancel();
+    _flushTimer = null;
+    if (_pendingLines == 0) return;
+    var text = _pending.toString();
+    _pending.clear();
+    _pendingLines = 0;
     try {
-      fileWriter?.writeStringSync("$content\r\n");
-      fileWriter?.flushSync();
+      // writeStringSync 进内核缓冲即可：进程被 SIGABRT 杀死时数据不会丢，
+      // 不需要每条都 fsync（fsync 才是真正阻塞的地方）。
+      fileWriter?.writeStringSync(text);
     } catch (e) {
       // 日志写失败不能影响播放
     }
   }
 
   Future close() async {
+    _flushPending();
     try {
       fileWriter?.closeSync();
     } catch (e) {

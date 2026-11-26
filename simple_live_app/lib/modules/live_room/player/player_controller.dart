@@ -752,7 +752,9 @@ class PlayerController extends BaseController
       }
     });
     _logSubscription = player.stream.log.listen((event) {
-      Log.d("播放器日志：$event");
+      // mpv 的日志是高频的（开启日志记录时可到每秒几十条），
+      // 只打到控制台，不写文件，否则日志文件会把主线程拖慢。
+      Log.d("播放器日志：$event", false);
     });
     _widthSubscription = player.stream.width.listen((event) {
       Log.d(
