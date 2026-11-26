@@ -481,6 +481,9 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
       await player.open(Playlist(mediaList, index: openIndex));
     });
 
+    // 成功加载：重置断流重连计数
+    _reconnectAttempts = 0;
+
     // 地址是带时效的，开始监测卡顿
     startStallWatchdog();
   }
@@ -539,12 +542,13 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   static const int _refreshCooldownSeconds = 60;
   DateTime _lastRefreshTime = DateTime.fromMillisecondsSinceEpoch(0);
 
-  Future<void> refreshPlayUrl() async {
+  Future<void> refreshPlayUrl({bool force = false}) async {
     if (_refreshingPlayUrl) {
       return;
     }
     var now = DateTime.now();
-    if (now.difference(_lastRefreshTime).inSeconds < _refreshCooldownSeconds) {
+    if (!force &&
+        now.difference(_lastRefreshTime).inSeconds < _refreshCooldownSeconds) {
       return;
     }
     _lastRefreshTime = now;
@@ -599,6 +603,10 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
       return;
     }
 
+    if (await _tryReconnect("播放中断")) {
+      return;
+    }
+
     Log.d("播放结束");
     // 遍历线路，如果全部链接都断开就是直播结束了
     if (playUrls.length - 1 == currentLineIndex) {
@@ -608,6 +616,40 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
 
       //setPlayer();
     }
+  }
+
+  /// 断流重连次数（成功加载后清零）
+  int _reconnectAttempts = 0;
+
+  /// 直播流被服务端断开（地址过期、CDN 断长连接）时 mpv 会报 completed，
+  /// 这不等于主播下播。先问一遍接口：还在播就重新拉地址重连。
+  /// 返回 true 表示「已经处理」（重连中，或已确认下播）。
+  Future<bool> _tryReconnect(String reason) async {
+    if (_reconnectAttempts >= 5) {
+      Log.d("$reason：重连次数已用尽");
+      return false;
+    }
+    var stillLive = true;
+    try {
+      var detailNow = await site.liveSite
+          .getRoomDetail(roomId: roomId)
+          .timeout(const Duration(seconds: 6));
+      stillLive = detailNow.status;
+    } catch (e) {
+      // 接口不通时按「仍在直播」处理，交给重连去试
+      Log.logPrint(e);
+    }
+    if (!stillLive) {
+      Log.d("$reason：接口确认房间已下播");
+      liveStatus.value = false;
+      return true;
+    }
+    _reconnectAttempts++;
+    var waitSeconds = _reconnectAttempts * 2;
+    Log.d("$reason：第 $_reconnectAttempts 次重连（${waitSeconds}s 后）");
+    await Future.delayed(Duration(seconds: waitSeconds));
+    await refreshPlayUrl(force: true);
+    return true;
   }
 
   int mediaErrorRetryCount = 0;
@@ -626,6 +668,10 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
       mediaErrorRetryCount += 1;
       //刷新一次
       setPlayer();
+      return;
+    }
+
+    if (await _tryReconnect("播放失败")) {
       return;
     }
 

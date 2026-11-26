@@ -109,7 +109,11 @@ class LogFileWriter {
     fileName = "$dt.log";
     initFile();
   }
-  IOSink? fileWriter;
+
+  /// 用同步写 + flushSync：进程被 SIGABRT 杀掉时，日志已经进内核缓冲，
+  /// 不会像 IOSink 那样把整段留在 Dart 内存里（之前闪退日志全是 0 字节）。
+  RandomAccessFile? fileWriter;
+
   void initFile() async {
     var supportDir = await getApplicationSupportDirectory();
     var logDir = Directory("${supportDir.path}/log");
@@ -117,17 +121,26 @@ class LogFileWriter {
       await logDir.create();
     }
     var logFile = File("${logDir.path}/$fileName");
-    fileWriter = logFile.openWrite(mode: FileMode.append);
+    fileWriter = logFile.openSync(mode: FileMode.append);
     writeSystemInfo();
   }
 
   void write(String content) {
-    fileWriter?.write(content);
-    fileWriter?.write("\r\n");
+    try {
+      fileWriter?.writeStringSync("$content\r\n");
+      fileWriter?.flushSync();
+    } catch (e) {
+      // 日志写失败不能影响播放
+    }
   }
 
   Future close() async {
-    await fileWriter?.close();
+    try {
+      fileWriter?.closeSync();
+    } catch (e) {
+      // ignore
+    }
+    fileWriter = null;
   }
 
   void writeSystemInfo() async {
