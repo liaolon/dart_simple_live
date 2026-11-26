@@ -122,9 +122,7 @@ class DouyinSite implements LiveSite {
       throw const FormatException("douyin categoryData array not closed");
     }
     var categoryJson = result.substring(arrayStart, end + 1);
-    categoryJson = categoryJson
-        .replaceAll(r'\"', '"')
-        .replaceAll(r'\/', '/');
+    categoryJson = categoryJson.replaceAll(r'\"', '"').replaceAll(r'\/', '/');
     var renderDataJson = json.decode(categoryJson);
     var iconMap = await _getBilibiliIconMap();
     for (var item in renderDataJson) {
@@ -147,17 +145,33 @@ class DouyinSite implements LiveSite {
               id: leafId,
               name: leafName,
               parentId: id,
-              pic: _iconForName(leafName, iconMap, fallback: iconMap["网游"] ?? ""),
+              pic: _iconForName(
+                leafName,
+                iconMap,
+                fallback: iconMap["网游"] ?? "",
+              ),
             ),
           );
         }
       }
       // 没有子分类的分区（聊天/音乐等）补一个“全部”入口。
       if (subs.isEmpty) {
-        subs.add(LiveSubCategory(id: id, name: name, parentId: id, pic: _iconForName(name, iconMap, fallback: iconMap[kDouyinTopAlias[name] ?? ""] ?? "")));
+        subs.add(
+          LiveSubCategory(
+            id: id,
+            name: name,
+            parentId: id,
+            pic: _iconForName(
+              name,
+              iconMap,
+              fallback: iconMap[kDouyinTopAlias[name] ?? ""] ?? "",
+            ),
+          ),
+        );
       }
       categories.add(LiveCategory(children: subs, id: id, name: name));
-    }    return categories;
+    }
+    return categories;
   }
 
   Future<Map<String, String>> _getBilibiliIconMap() async {
@@ -206,7 +220,11 @@ class DouyinSite implements LiveSite {
     return map;
   }
 
-  String _iconForName(String name, Map<String, String> iconMap, {String fallback = ""}) {
+  String _iconForName(
+    String name,
+    Map<String, String> iconMap, {
+    String fallback = "",
+  }) {
     if (name.isEmpty || iconMap.isEmpty) {
       return "";
     }
@@ -230,6 +248,104 @@ class DouyinSite implements LiveSite {
     }
     return best.isNotEmpty ? best : fallback;
   }
+
+  /// 抖音没有公开的“推荐”接口，这里把多个一级分区的房间聚合成一条推荐流，
+  /// 避免像以前那样只盯着单个分区，翻来覆去就十几个房间。
+  /// 按内容量排序；720 是抖音 web 端的历史“推荐”分区，
+  /// 现已不在首页分类表里，放到最后做兜底。
+  static const List<String> kRecommendPartitions = [
+    '103,4', // 游戏
+    '102,4', // 音乐
+    '101,4', // 聊天
+    '104,4', // 二次元
+    '105,4', // 舞蹈
+    '106,4', // 文化
+    '107,4', // 生活
+    '108,4', // 运动
+    '720,1', // 历史“推荐”分区（可能已失效）
+  ];
+
+  /// 每次翻页取几个分区，轮换着来
+  static const int kRecommendPartitionsPerPage = 3;
+
+  /// 单个分区单页的条数（接口一次最多给这么多）
+  static const int kPartitionPageSize = 15;
+
+  Future<List<LiveRoomItem>> _getPartitionRooms({
+    required String partition,
+    required String partitionType,
+    int offset = 0,
+    int count = kPartitionPageSize,
+  }) async {
+    String serverUrl =
+        "https://live.douyin.com/webcast/web/partition/detail/room/v2/";
+    var uri = Uri.parse(serverUrl).replace(
+      scheme: "https",
+      port: 443,
+      queryParameters: {
+        "aid": '6383',
+        "app_name": "douyin_web",
+        "live_id": '1',
+        "device_platform": "web",
+        "language": "zh-CN",
+        "enter_from": "link_share",
+        "cookie_enabled": "true",
+        "screen_width": "1980",
+        "screen_height": "1080",
+        "browser_language": "zh-CN",
+        "browser_platform": "Win32",
+        "browser_name": "Edge",
+        "browser_version": "125.0.0.0",
+        "browser_online": "true",
+        "count": count.toString(),
+        "offset": offset.toString(),
+        "partition": partition,
+        "partition_type": partitionType,
+        "req_from": '2',
+      },
+    );
+    var requestUrl = DouyinSign.getAbogusUrl(uri.toString(), kDefaultUserAgent);
+
+    var result = await HttpClient.instance.getJson(
+      requestUrl,
+      header: await getRequestHeaders(),
+    );
+
+    var data = result["data"]?["data"];
+    if (data is! List) {
+      return <LiveRoomItem>[];
+    }
+    var items = <LiveRoomItem>[];
+    for (var raw in data) {
+      if (raw is! Map) {
+        continue;
+      }
+      var room = raw["room"];
+      if (room is! Map) {
+        continue;
+      }
+      var coverList = room["cover"]?["url_list"];
+      var cover = (coverList is List && coverList.isNotEmpty)
+          ? coverList[0]
+          : "";
+      var online =
+          int.tryParse(
+            room["room_view_stats"]?["display_value"]?.toString() ?? "",
+          ) ??
+          0;
+      items.add(
+        LiveRoomItem(
+          roomId: raw["web_rid"]?.toString() ?? "",
+          title: room["title"]?.toString() ?? "",
+          cover: cover.toString(),
+          userName: room["owner"]?["nickname"]?.toString() ?? "",
+          online: online,
+        ),
+      );
+    }
+    return items;
+  }
+
   @override
   Future<LiveCategoryResult> getCategoryRooms(
     LiveSubCategory category, {
@@ -294,8 +410,71 @@ class DouyinSite implements LiveSite {
 
   @override
   Future<LiveCategoryResult> getRecommendRooms({int page = 1}) async {
-    String serverUrl =
-        "https://live.douyin.com/webcast/web/partition/detail/room/v2/";
+    var total = kRecommendPartitions.length;
+    var start = ((page - 1) * kRecommendPartitionsPerPage) % total;
+    // 分区池轮完一圈后，再整体往后翻一页
+    var offset =
+        ((page - 1) * kRecommendPartitionsPerPage ~/ total) *
+        kPartitionPageSize;
+
+    var batches = await Future.wait(
+      List.generate(kRecommendPartitionsPerPage, (index) {
+        var ids = kRecommendPartitions[(start + index) % total].split(',');
+        return _getPartitionRooms(
+          partition: ids[0],
+          partitionType: ids[1],
+          offset: offset,
+        ).catchError((Object e) {
+          CoreLog.error(e);
+          return <LiveRoomItem>[];
+        });
+      }),
+    );
+
+    // 各分区轮流取房间，既保证多样性，也避免重复
+    var seen = <String>{};
+    var items = <LiveRoomItem>[];
+    var maxLength = batches.fold<int>(
+      0,
+      (max, batch) => batch.length > max ? batch.length : max,
+    );
+    for (var index = 0; index < maxLength; index++) {
+      for (var batch in batches) {
+        if (index >= batch.length) {
+          continue;
+        }
+        var room = batch[index];
+        if (room.roomId.isEmpty) {
+          continue;
+        }
+        if (seen.add(room.roomId)) {
+          items.add(room);
+        }
+      }
+    }
+
+    // “推荐”按人气排序，保证首屏拿到的是热门房间
+    items.sort((a, b) => b.online.compareTo(a.online));
+
+    return LiveCategoryResult(
+      hasMore: batches.any((batch) => batch.length >= kPartitionPageSize),
+      items: items,
+    );
+  }
+
+  /// 当前 cookie 是否带登录态（sessionid）。
+  bool get hasLoginSession {
+    var text = cookie.toLowerCase();
+    return text.contains("sessionid=") || text.contains("sessionid_ss=");
+  }
+
+  /// 关注流：当前账号关注的主播里正在直播的房间。
+  ///
+  /// 需要登录态（未登录时接口返回 20003）。
+  /// 这是抖音直播网页版「关注」tab 实际请求的接口：
+  /// `/webcast/feed/follow_top/`，必须带 `enter_source` 等参数，否则返回 10011。
+  Future<LiveCategoryResult> getFollowRooms({int page = 1}) async {
+    const serverUrl = "https://live.douyin.com/webcast/feed/follow_top/";
     var uri = Uri.parse(serverUrl).replace(
       scheme: "https",
       port: 443,
@@ -307,44 +486,151 @@ class DouyinSite implements LiveSite {
         "language": "zh-CN",
         "enter_from": "link_share",
         "cookie_enabled": "true",
-        "screen_width": "1980",
-        "screen_height": "1080",
+        "screen_width": "2560",
+        "screen_height": "1440",
         "browser_language": "zh-CN",
         "browser_platform": "Win32",
-        "browser_name": "Edge",
-        "browser_version": "125.0.0.0",
-        "browser_online": "true",
-        "count": '15',
-        "offset": ((page - 1) * 15).toString(),
-        "partition": '0',
-        "partition_type": '1',
-        "req_from": '2',
+        "browser_name": "Chrome",
+        "browser_version": "155.0.0.0",
+        "os_name": "Windows",
+        "os_version": "10",
+        "enter_source": "homepage_pc_followtop",
+        "need_pinned_info": "0",
+        "follow_session_id": "0",
+        "source_key": "web_homepage_follow_top",
+        "webcast_version_code": "170400",
+        "version_code": "170400",
+        "need_map": "1",
+        "count": kPartitionPageSize.toString(),
+        "offset": ((page - 1) * kPartitionPageSize).toString(),
       },
     );
     var requestUrl = DouyinSign.getAbogusUrl(uri.toString(), kDefaultUserAgent);
 
-    var result = await HttpClient.instance.getJson(
-      requestUrl,
-      header: await getRequestHeaders(),
-    );
+    // 关注流对 UA 敏感：参数里声明的是 Chrome，
+    // 用默认的 QQBrowser UA 会拿到 status=0 但空列表。
+    const followUa =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36";
+    var headers = await getRequestHeaders();
+    headers["User-Agent"] = followUa;
 
-    var hasMore = (result["data"]["data"] as List).length >= 15;
-    var items = <LiveRoomItem>[];
-    for (var item in result["data"]["data"]) {
-      var roomItem = LiveRoomItem(
-        roomId: item["web_rid"],
-        title: item["room"]["title"].toString(),
-        cover: item["room"]["cover"]["url_list"][0].toString(),
-        userName: item["room"]["owner"]["nickname"].toString(),
-        online:
-            int.tryParse(
-              item["room"]["room_view_stats"]["display_value"].toString(),
-            ) ??
-            0,
-      );
-      items.add(roomItem);
+    var result = await HttpClient.instance.getJson(requestUrl, header: headers);
+
+    if (result["status_code"] != 0) {
+      // 20003 = 未登录，其它错误同样按空处理，交给上层回退到本地关注
+      CoreLog.w("抖音关注流不可用: ${result["status_code"]}");
+      return LiveCategoryResult(hasMore: false, items: <LiveRoomItem>[]);
     }
-    return LiveCategoryResult(hasMore: hasMore, items: items);
+
+    var items = _parseFeedRooms(result["data"], followed: true);
+    return LiveCategoryResult(
+      hasMore: items.length >= kPartitionPageSize,
+      items: items,
+    );
+  }
+
+  /// 登录态下的「推荐」直播流（抖音首页推荐 tab 用的接口）。
+  ///
+  /// 未登录也能拿到一份公共推荐；登录后会带上账号画像，内容明显更贴近自己。
+  /// 这是「热门」的正确来源，分区聚合只在它失败时兜底。
+  Future<LiveCategoryResult> getRecommendFeed({int page = 1}) async {
+    const serverUrl = "https://live.douyin.com/webcast/feed/";
+    var uri = Uri.parse(serverUrl).replace(
+      scheme: "https",
+      port: 443,
+      queryParameters: {
+        "aid": '6383',
+        "app_name": "douyin_web",
+        "live_id": '1',
+        "device_platform": "web",
+        "language": "zh-CN",
+        "enter_from": "link_share",
+        "cookie_enabled": "true",
+        "screen_width": "2560",
+        "screen_height": "1440",
+        "browser_language": "zh-CN",
+        "browser_platform": "Win32",
+        "browser_name": "Chrome",
+        "browser_version": "155.0.0.0",
+        "os_name": "Windows",
+        "os_version": "10",
+        "count": kPartitionPageSize.toString(),
+        "offset": ((page - 1) * kPartitionPageSize).toString(),
+      },
+    );
+    var requestUrl = DouyinSign.getAbogusUrl(uri.toString(), kDefaultUserAgent);
+
+    var headers = await getRequestHeaders();
+    headers["User-Agent"] = _chromeUa;
+
+    var result = await HttpClient.instance.getJson(requestUrl, header: headers);
+
+    if (result["status_code"] != 0) {
+      CoreLog.w("抖音推荐流不可用: ${result["status_code"]}");
+      return LiveCategoryResult(hasMore: false, items: <LiveRoomItem>[]);
+    }
+
+    var items = _parseFeedRooms(result["data"]);
+    return LiveCategoryResult(
+      hasMore: items.length >= kPartitionPageSize,
+      items: items,
+    );
+  }
+
+  static const String _chromeUa =
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36";
+
+  /// 解析 feed 类接口的 `data`（兼容 `[...]` 与 `{"data":[...]}` 两种结构）。
+  List<LiveRoomItem> _parseFeedRooms(dynamic data, {bool followed = false}) {
+    var list = data is List ? data : (data is Map ? data["data"] : null);
+    if (list is! List) {
+      return <LiveRoomItem>[];
+    }
+    var items = <LiveRoomItem>[];
+    for (var raw in list) {
+      var room = raw is Map ? raw["data"] : null;
+      if (room is! Map) {
+        continue;
+      }
+      var coverList = room["cover"]?["url_list"];
+      var cover = (coverList is List && coverList.isNotEmpty)
+          ? coverList[0]
+          : "";
+      var owner = room["owner"];
+      var stats = room["room_view_stats"];
+      var online =
+          int.tryParse(
+            (stats is Map ? stats["display_value"] : null)?.toString() ?? "",
+          ) ??
+          int.tryParse(room["user_count"]?.toString() ?? "") ??
+          0;
+      // 直播间要用「主播 short_id」当 web_rid 才能进房；
+      // room.id_str 是 19 位一次性房间号，旧的 reflow 接口已失效。
+      var roomId = "";
+      if (owner is Map) {
+        roomId = (owner["short_id"] ?? owner["web_rid"] ?? "").toString();
+      }
+      if (roomId.isEmpty && raw is Map) {
+        roomId = (raw["web_rid"] ?? "").toString();
+      }
+      if (roomId.isEmpty) {
+        roomId = (room["id_str"] ?? room["id"] ?? "").toString();
+      }
+      if (roomId.isEmpty) {
+        continue;
+      }
+      items.add(
+        LiveRoomItem(
+          roomId: roomId,
+          title: room["title"]?.toString() ?? "",
+          cover: cover.toString(),
+          userName: owner is Map ? (owner["nickname"]?.toString() ?? "") : "",
+          online: online,
+          isFollowed: followed,
+        ),
+      );
+    }
+    return items;
   }
 
   @override
@@ -900,6 +1186,7 @@ class DouyinSite implements LiveSite {
       return [];
     }
   }
+
   @override
   Future<LiveSearchAnchorResult> searchAnchors(
     String keyword, {

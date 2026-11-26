@@ -80,25 +80,52 @@ class AccountController extends GetxController {
   }
 
   void douyinTap() async {
-    if (DouyinAccountService.instance.hasCookie.value) {
-      var result = await Utils.showAlertDialog("确定要清除自定义 Cookie 吗？", title: "清除配置");
+    // 已登录：只提供退出
+    if (DouyinAccountService.instance.logined.value) {
+      var result = await Utils.showAlertDialog(
+        "当前已登录抖音账号，退出后「我的关注」会回退到本地关注列表。",
+        title: "退出抖音登录",
+      );
       if (result) {
         DouyinAccountService.instance.clearCookie();
-        SmartDialog.showToast("已清除 Cookie，将使用默认 ttwid");
+        SmartDialog.showToast("已退出抖音账号");
       }
-    } else {
+      return;
+    }
+
+    // 未登录：在「网页登录」和「手动填 cookie」之间选
+    var action = await Get.dialog<String>(
+      AlertDialog(
+        title: const Text("抖音直播"),
+        content: const Text(
+          "登录抖音账号后，首页「我的关注」会直接展示账号关注的主播；"
+          "不登录也可以继续看热门直播。",
+          style: TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(result: "cookie"),
+            child: const Text("手动填 Cookie"),
+          ),
+          TextButton(
+            onPressed: () => Get.back(result: "login"),
+            child: const Text("网页登录"),
+          ),
+        ],
+      ),
+    );
+
+    if (action == "login") {
+      Get.toNamed(RoutePath.kDouyinWebLogin);
+    } else if (action == "cookie") {
       doDouyinCookieConfig();
     }
   }
 
+  /// 手动填写 Cookie：既支持只填 ttwid 值，也支持粘贴包含登录态的完整 Cookie。
   void doDouyinCookieConfig() {
-    // 初始化文本框时，只显示 ttwid 的值部分
     var savedCookie = DouyinAccountService.instance.cookie;
-    var displayText = savedCookie;
-    if (savedCookie.startsWith('ttwid=')) {
-      displayText = savedCookie.substring(6); // 去掉 "ttwid="
-    }
-    var controller = TextEditingController(text: displayText);
+    var controller = TextEditingController(text: savedCookie);
 
     Get.dialog(
       AlertDialog(
@@ -109,7 +136,8 @@ class AccountController extends GetxController {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                "粘贴完整 Cookie 可解锁搜索主播、关注列表等登录功能。\n留空则使用默认 ttwid（仅能看直播）。",
+                "粘贴完整 Cookie（含 sessionid）即视为登录，可解锁搜索主播、关注列表。\n"
+                "只填 ttwid 值则仅能看直播；留空使用默认 ttwid。",
                 style: TextStyle(fontSize: 12, color: Colors.grey),
               ),
               const SizedBox(height: 12),
@@ -117,14 +145,13 @@ class AccountController extends GetxController {
                 controller: controller,
                 maxLines: 6,
                 decoration: const InputDecoration(
-                  hintText: "请粘贴完整 Cookie（留空则使用默认值）",
+                  hintText: "请粘贴完整 Cookie 或 ttwid 值（留空则使用默认值）",
                   border: OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 8),
               TextButton.icon(
                 onPressed: () {
-                  // 提取 ttwid 的值部分（去掉 "ttwid=" 前缀）
                   controller.text = DouyinSite.kDefaultCookie;
                 },
                 icon: const Icon(Icons.restore),
@@ -146,7 +173,12 @@ class AccountController extends GetxController {
                 DouyinAccountService.instance.clearCookie();
                 SmartDialog.showToast("已清除 Cookie，将使用默认 ttwid");
               } else {
-                DouyinAccountService.instance.setCookie(input);
+                // 只填了 ttwid 的值时自动补前缀，粘贴完整 Cookie 则原样保存
+                var cookie = input;
+                if (!input.contains('=')) {
+                  cookie = 'ttwid=$input';
+                }
+                DouyinAccountService.instance.setCookie(cookie);
                 SmartDialog.showToast("Cookie 已保存");
               }
             },
