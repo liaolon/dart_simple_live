@@ -39,7 +39,7 @@ class AppSkin {
     final dark = brightness == Brightness.dark;
     final seedColor = Color(seed);
     final secondaryColor = Color(secondary ?? seed);
-    final tertiaryColor = Color(tertiary ?? secondaryColor);
+    final tertiaryColor = Color(tertiary ?? secondary ?? seed);
     final base = dark ? const Color(0xFF101216) : Colors.white;
     return LinearGradient(
       begin: Alignment.topLeft,
