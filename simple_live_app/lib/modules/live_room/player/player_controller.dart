@@ -245,16 +245,32 @@ mixin PlayerDanmakuMixin on PlayerStateMixin {
   /// 省电模式下的弹幕采样计数
   int _danmakuSampleCounter = 0;
 
+  /// 上屏限流窗口。
+  /// 弹幕极密时全量上屏会把 UI 线程压死（表现为弹幕一卡一卡地滑），
+  /// 超出上限的直接丢弃；聊天区仍保留完整记录，不会丢消息。
+  int _danmakuWindowStart = 0;
+  int _danmakuWindowCount = 0;
+
   void addDanmaku(List<DanmakuContentItem> items) {
     if (!showDanmakuState.value) {
       return;
     }
     final powerSave = AppSettingsController.instance.danmuPowerSave.value;
+    final capPerSecond = powerSave ? 15 : 30;
+    var now = DateTime.now().millisecondsSinceEpoch;
+    if (now - _danmakuWindowStart >= 1000) {
+      _danmakuWindowStart = now;
+      _danmakuWindowCount = 0;
+    }
     for (var item in items) {
-      // 省电模式：每 2 条只上屏 1 条，直接砍掉一半布局与绘制开销
+      if (_danmakuWindowCount >= capPerSecond) {
+        return;
+      }
+      // 省电模式：每 2 条只上屏 1 条，再砍一半布局与绘制开销
       if (powerSave && _danmakuSampleCounter++ % 2 == 1) {
         continue;
       }
+      _danmakuWindowCount++;
       danmakuController?.addDanmaku(item);
     }
   }

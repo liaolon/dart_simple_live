@@ -183,6 +183,19 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     loadData();
   }
 
+  DateTime _lastChatScrollTime = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// 聊天区滚动节流：弹幕密集时每秒几十条消息，
+  /// 每条都 postFrameCallback 会把主线程拖垮（画面和弹幕一起卡）。
+  void _scheduleChatScroll() {
+    var now = DateTime.now();
+    if (now.difference(_lastChatScrollTime).inMilliseconds < 150) {
+      return;
+    }
+    _lastChatScrollTime = now;
+    WidgetsBinding.instance.addPostFrameCallback((_) => chatScrollToBottom());
+  }
+
   /// 聊天栏始终滚动到底部
   void chatScrollToBottom() {
     if (scrollController.hasClients) {
@@ -204,8 +217,9 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   /// 接收到WebSocket信息
   void onWSMessage(LiveMessage msg) {
     if (msg.type == LiveMessageType.chat) {
-      if (messages.length > 200 && !disableAutoScroll.value) {
-        messages.removeAt(0);
+      // 批量裁剪，避免每条消息都做一次 O(n) 的 removeAt(0)
+      if (messages.length > 260) {
+        messages.removeRange(0, messages.length - 200);
       }
 
       // 关键词屏蔽检查
@@ -230,9 +244,7 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
 
       messages.add(msg);
 
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => chatScrollToBottom(),
-      );
+      _scheduleChatScroll();
       // 弹幕通道和播放通道是两条独立的连接，
       // 播放失败（liveStatus 被置为 false）不应该连带把弹幕也关掉，
       // 否则会出现“聊天区还在滚动、画面上一条弹幕都没有”的情况。
@@ -420,7 +432,30 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     setPlayer();
   }
 
-  void initPlaylist() async {
+  /// 播放器加载/切换的串行队列。
+  /// mpv 的 loadfile / stop / jump 不能并发下发：旧流的 completed 回调
+  /// （mediaEnd）与看门狗重载同时进场时，会命中 libmpv 的
+  /// "player/loadfile.c: assertion mpctx->stop_play failed" 并 SIGABRT。
+  Future<void> _playerQueue = Future<void>.value();
+  bool _playerBusy = false;
+
+  Future<void> _playerOp(Future<void> Function() action) {
+    final next = _playerQueue.then((_) async {
+      _playerBusy = true;
+      try {
+        await action();
+      } finally {
+        _playerBusy = false;
+      }
+    }).catchError((Object e) {
+      _playerBusy = false;
+      Log.logPrint(e);
+    });
+    _playerQueue = next;
+    return next;
+  }
+
+  Future<void> initPlaylist() async {
     currentLineInfo.value = "线路${currentLineIndex + 1}";
     errorMsg.value = "";
 
@@ -440,7 +475,11 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     if (openIndex < 0 || openIndex >= mediaList.length) {
       openIndex = 0;
     }
-    await player.open(Playlist(mediaList, index: openIndex));
+    await _playerOp(() async {
+      // 先停干净，确保 mpv 不在 stop_play 中间
+      await player.stop();
+      await player.open(Playlist(mediaList, index: openIndex));
+    });
 
     // 地址是带时效的，开始监测卡顿
     startStallWatchdog();
@@ -526,7 +565,7 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
       playHeaders = playUrl.headers;
       currentLineIndex = lineIndex;
       mediaErrorRetryCount = 0;
-      initPlaylist();
+      await initPlaylist();
     } catch (e) {
       Log.logPrint(e);
     } finally {
@@ -538,12 +577,16 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     currentLineInfo.value = "线路${currentLineIndex + 1}";
     errorMsg.value = "";
 
-    await player.jump(currentLineIndex);
+    await _playerOp(() => player.jump(currentLineIndex));
   }
 
   @override
   void mediaEnd() async {
     super.mediaEnd();
+    // 播放器正在加载/切换时，这条 completed 是旧流留下的，忽略
+    if (_playerBusy) {
+      return;
+    }
     if (mediaErrorRetryCount < 2) {
       Log.d("播放结束，尝试第${mediaErrorRetryCount + 1}次刷新");
       if (mediaErrorRetryCount == 1) {
@@ -571,6 +614,9 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   @override
   void mediaError(String error) async {
     super.mediaEnd();
+    if (_playerBusy) {
+      return;
+    }
     if (mediaErrorRetryCount < 2) {
       Log.d("播放失败，尝试第${mediaErrorRetryCount + 1}次刷新");
       if (mediaErrorRetryCount == 1) {
