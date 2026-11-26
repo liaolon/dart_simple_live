@@ -233,7 +233,11 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
       WidgetsBinding.instance.addPostFrameCallback(
         (_) => chatScrollToBottom(),
       );
-      if (!liveStatus.value || isBackground) {
+      // 弹幕通道和播放通道是两条独立的连接，
+      // 播放失败（liveStatus 被置为 false）不应该连带把弹幕也关掉，
+      // 否则会出现“聊天区还在滚动、画面上一条弹幕都没有”的情况。
+      // 只有退到后台时才需要停止上屏。
+      if (isBackground) {
         return;
       }
 
@@ -431,7 +435,103 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     // 初始化播放器并设置 ao 参数
     await initializePlayer();
 
-    await player.open(Playlist(mediaList));
+    // 刷新地址时要停在原来的线路上
+    var openIndex = currentLineIndex;
+    if (openIndex < 0 || openIndex >= mediaList.length) {
+      openIndex = 0;
+    }
+    await player.open(Playlist(mediaList, index: openIndex));
+
+    // 地址是带时效的，开始监测卡顿
+    startStallWatchdog();
+  }
+
+  /// 播放卡顿检测
+  /// - 直播地址（虎牙 antiCode、斗鱼 CDN 直链等）是带时效的，
+  ///   链接失效后播放器不会报错，画面就停在最后一帧。
+  ///   这里通过播放进度是否变化来判断卡死，然后重新拉取地址。
+  Timer? _stallCheckTimer;
+  Duration _lastPosition = Duration.zero;
+  int _stallTick = 0;
+
+  /// 播放进度超过这个秒数没有变化就认为卡住了
+  static const int _stallTimeoutSeconds = 12;
+
+  void startStallWatchdog() {
+    _stallCheckTimer?.cancel();
+    _lastPosition = player.state.position;
+    _stallTick = 0;
+    _stallCheckTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
+      if (!liveStatus.value || isBackground || _refreshingPlayUrl) {
+        return;
+      }
+      // 暂停时不检测
+      if (!player.state.playing) {
+        return;
+      }
+      final position = player.state.position;
+      if (position != _lastPosition) {
+        _lastPosition = position;
+        _stallTick = 0;
+        return;
+      }
+      _stallTick++;
+      if (_stallTick * 2 < _stallTimeoutSeconds) {
+        return;
+      }
+      _stallTick = 0;
+      Log.d("播放卡住，重新获取播放地址");
+      refreshPlayUrl();
+    });
+  }
+
+  void stopStallWatchdog() {
+    _stallCheckTimer?.cancel();
+    _stallCheckTimer = null;
+  }
+
+  /// 重新获取播放地址并重开播放器
+  /// - 与 setPlayer() 不同，这里会重新向平台请求地址，
+  ///   拿到的是新签发的、未过期的链接。
+  bool _refreshingPlayUrl = false;
+
+  /// 两次刷新地址的最小间隔，
+  /// 避免网络本来就慢的时候反复重开播放器（重开会把缓冲清掉）。
+  static const int _refreshCooldownSeconds = 60;
+  DateTime _lastRefreshTime = DateTime.fromMillisecondsSinceEpoch(0);
+
+  Future<void> refreshPlayUrl() async {
+    if (_refreshingPlayUrl) {
+      return;
+    }
+    var now = DateTime.now();
+    if (now.difference(_lastRefreshTime).inSeconds < _refreshCooldownSeconds) {
+      return;
+    }
+    _lastRefreshTime = now;
+    _refreshingPlayUrl = true;
+    try {
+      var playUrl = await site.liveSite.getPlayUrls(
+          detail: detail.value!, quality: qualites[currentQuality]);
+      if (playUrl.urls.isEmpty) {
+        Log.d("重新获取播放地址失败");
+        return;
+      }
+      // 尽量停留在原来的线路上
+      var lineIndex = currentLineIndex;
+      if (lineIndex < 0 || lineIndex >= playUrl.urls.length) {
+        lineIndex = 0;
+      }
+      playUrls.value = playUrl.urls;
+      playHeaders = playUrl.headers;
+      currentLineIndex = lineIndex;
+      mediaErrorRetryCount = 0;
+      initPlaylist();
+    } catch (e) {
+      Log.logPrint(e);
+    } finally {
+      _refreshingPlayUrl = false;
+    }
   }
 
   void setPlayer() async {
@@ -1056,6 +1156,7 @@ ${error?.stackTrace}''');
     WidgetsBinding.instance.removeObserver(this);
     scrollController.removeListener(scrollListener);
     autoExitTimer?.cancel();
+    stopStallWatchdog();
 
     liveDanmaku.stop();
     danmakuController = null;

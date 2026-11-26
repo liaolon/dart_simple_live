@@ -30,6 +30,9 @@ mixin PlayerMixin {
   late final player = Player(
     configuration: PlayerConfiguration(
       title: "Simple Live Player",
+      // demuxer 缓存大小，播放卡顿时调大可以抗网络抖动
+      bufferSize:
+          AppSettingsController.instance.playerBufferSize.value * 1024 * 1024,
       logLevel: AppSettingsController.instance.logEnable.value
           ? MPVLogLevel.info
           : MPVLogLevel.error,
@@ -48,8 +51,18 @@ mixin PlayerMixin {
         );
       }
     }
+    // 缓冲区大小是构造播放器时传入的，改设置后需要重新进入直播间才生效；
+    // 这里再设一次运行时属性，让设置项立即生效。
+    try {
+      var bufferBytes =
+          AppSettingsController.instance.playerBufferSize.value * 1024 * 1024;
+      await pp.setProperty('demuxer-max-bytes', bufferBytes.toString());
+      await pp.setProperty('demuxer-max-back-bytes', bufferBytes.toString());
+    } catch (e) {
+      Log.logPrint(e);
+    }
     // media_kit 仓库更新导致的问题，临时解决办法
-    if(Platform.isAndroid){
+    if (Platform.isAndroid) {
       await pp.setProperty('force-seekable', 'yes');
     }
   }
