@@ -64,11 +64,13 @@ mixin PlayerMixin {
     // media_kit 仓库更新导致的问题，临时解决办法
     if (Platform.isAndroid) {
       await pp.setProperty('force-seekable', 'yes');
-      // 低功耗解码：显式指定零拷贝硬解，避免 hwdec=auto 选到 mediacodec-copy
+      // 低功耗解码：只钉 hwdec。
+      // 绝对不要在这里直接设 vo=mediacodec_embed：media_kit 必须等 Surface 就绪
+      // （wid != 0）才切 vo，抢先设置会命中 libmpv 的
+      // "vo->opts->WinID != 0 && != -1" 断言并 SIGABRT（真机复现过闪退）。
       if (AppSettingsController.instance.playerLowPowerDecode.value) {
         try {
           await pp.setProperty('hwdec', 'mediacodec');
-          await pp.setProperty('vo', 'mediacodec_embed');
         } catch (e) {
           Log.logPrint(e);
         }
